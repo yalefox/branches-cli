@@ -113,10 +113,12 @@ services:
       - GITEA__actions__ENABLED=true
       - GITEA__actions__DEFAULT_ACTIONS_URL=github
       # Repository
-      - GITEA__repository__DEFAULT_REPO_UNITS=repo.code,repo.issues,repo.pulls,repo.releases,repo.wiki,repo.projects,repo.actions
+      - GITEA__repository__DEFAULT_REPO_UNITS=repo.code,repo.issues,repo.pulls,repo.releases,repo.wiki,repo.projects,repo.actions,repo.packages
       - GITEA__repository__ENABLE_PUSH_CREATE_USER=true
       - GITEA__repository__ENABLE_PUSH_CREATE_ORG=true
       - GITEA__repository__DEFAULT_PUSH_CREATE_PRIVATE=false
+      - GITEA__repository__MAX_SIZE=${MAX_UPLOAD_SIZE:-5368709120}
+      - GITEA__packages__ENABLED=${PACKAGES_ENABLED:-true}
       # Mailer
       - GITEA__mailer__ENABLED=${SMTP_ENABLED:-true}
       - GITEA__mailer__PROTOCOL=smtps
