@@ -2,15 +2,17 @@
 
 **Self-hosted Git server with CI/CD, MinIO LFS, OIDC, and multi-arch builds**
 
-| Component | Version | Description |
-|-----------|---------|-------------|
-| Gitea | 1.23 | Git server with Actions |
-| PostgreSQL | 17-alpine | Database |
-| MinIO | latest | S3-compatible LFS storage |
-| Nginx | alpine | Reverse proxy |
-| Act Runners | latest | CI/CD build agents |
-| Buildx | stable | Multi-arch builds |
-| Watchtower | latest | Auto-updates (staging only) |
+## Current Versions
+
+| Component | Version | Image |
+|-----------|---------|-------|
+| Gitea | 1.23 | `gitea/gitea:1.23` |
+| PostgreSQL | 17 | `postgres:17-alpine` |
+| MinIO | 2024-12-18 | `minio/minio:RELEASE.2024-12-18T13-15-44Z` |
+| Nginx | alpine | `nginx:alpine` |
+| Act Runners | latest | `gitea/act_runner:latest` |
+| Buildx | stable-1 | `moby/buildkit:buildx-stable-1` |
+| Watchtower | latest | `containrrr/watchtower:latest` |
 
 ---
 
@@ -50,6 +52,10 @@ sudo ./01-install-production.sh
 
 ## Architecture
 
+> **Note**: Checkpoint (Traefik/Mantrae) runs on a SEPARATE server. It only manages
+> routing rules - it does NOT run your containers. All terrarium-git containers
+> (Gitea, MinIO, PostgreSQL, runners, etc.) run on YOUR server.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    External Traffic                          │
@@ -59,36 +65,43 @@ sudo ./01-install-production.sh
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  Checkpoint (Traefik) - TLS Termination                      │
-│  Managed via: https://checkpoint.terrarium.network           │
+│  Checkpoint Server (SEPARATE from terrarium-git)             │
+│  ├── Traefik: TLS termination, reverse proxy                │
+│  └── Mantrae: Web UI at https://checkpoint.terrarium.network │
+│                                                              │
+│  Mantrae tells Traefik: "Route terrarium-git.terrarium.network│
+│  to <your-server-ip>:3000"                                   │
 └──────────────────────────┬──────────────────────────────────┘
                            │
            ┌───────────────┼───────────────┐
            │               │               │
            ▼               ▼               ▼
       :3000           :9001           :2222
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│    Nginx     │  │    MinIO     │  │  Gitea SSH   │
-│  (Reverse    │  │  (Console)   │  │  (Git Clone) │
-│   Proxy)     │  │              │  │              │
-└──────┬───────┘  └──────────────┘  └──────────────┘
-       │
-       ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  Gitea (Port 3000)                                           │
-│  - Git repositories                                          │
-│  - LFS → MinIO (S3)                                          │
-│  - Actions/CI-CD                                             │
-│  - OIDC (Pocket ID)                                          │
-└──────────┬─────────────────────────────────┬────────────────┘
-           │                                 │
-           ▼                                 ▼
-┌──────────────────────┐          ┌────────────────────────────┐
-│  PostgreSQL 17       │          │  Act Runners (x2+)         │
-│  - Metadata          │          │  - Docker-in-Docker        │
-│  - Users, Issues     │          │  - SSH keys for cloning    │
-└──────────────────────┘          │  - Multi-arch via Buildx   │
-                                  └────────────────────────────┘
+│  YOUR SERVER (terrarium-git VM/container)                    │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │    Nginx     │  │    MinIO     │  │  Gitea SSH   │       │
+│  │   (Proxy)    │  │  (Console)   │  │  (Git Clone) │       │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘       │
+│         │                                                    │
+│         ▼                                                    │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Gitea (Port 3000)                                   │   │
+│  │  - Git repositories                                  │   │
+│  │  - LFS → MinIO (S3)                                  │   │
+│  │  - Actions/CI-CD                                     │   │
+│  │  - OIDC (Pocket ID)                                  │   │
+│  └────────┬─────────────────────────────┬───────────────┘   │
+│           │                             │                    │
+│           ▼                             ▼                    │
+│  ┌──────────────────┐        ┌────────────────────────┐     │
+│  │  PostgreSQL 17   │        │  Act Runners (x2+)     │     │
+│  │  - Metadata      │        │  - Docker-in-Docker    │     │
+│  │  - Users, Issues │        │  - SSH keys            │     │
+│  └──────────────────┘        │  - Buildx multi-arch   │     │
+│                              └────────────────────────┘     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
