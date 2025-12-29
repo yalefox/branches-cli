@@ -229,9 +229,6 @@ setup_environment() {
     
     # Re-source to get updated values
     source .env
-    
-    # Debug: verify MinIO vars are set
-    id
 }
 
 # =============================================================================
