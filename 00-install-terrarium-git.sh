@@ -282,27 +282,25 @@ check_ports() {
     
     for port in "${ports[@]}"; do
         if lsof -i ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
-            log_warn "Port $port is in use"
-            conflict=true
-            
-            # Try to identify what is using it
+            # Port is in use - check who is using it
             local pid=$(lsof -i ":$port" -sTCP:LISTEN -t | head -n 1)
             local name=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
             
-            log_info "Process using port $port: $name (PID: $pid)"
-            
-            # If it's docker, we can try to clean up
+            # If it's docker, we can try to clean up silently first
             if [[ "$name" == *"com.docker"* ]] || [[ "$name" == *"docker"* ]]; then
-                 log_info "Attempting to stop Docker containers using port $port..."
                  # Find container ID using this port
                  local container_id=$(docker ps --format '{{.ID}}\t{{.Ports}}' | grep "$port->" | awk '{print $1}')
                  if [[ -n "$container_id" ]]; then
+                     log_info "Freeing port $port (stopping container $container_id)..."
                      docker stop "$container_id" >/dev/null
                      docker rm "$container_id" >/dev/null
-                     log "Stopped conflicting container: $container_id"
-                     conflict=false # Resolved
+                     continue # Resolved, check next port
                  fi
             fi
+
+            # If we couldn't resolve it, NOW we warn
+            log_warn "Port $port is in use by $name (PID: $pid)"
+            conflict=true
         fi
     done
     
