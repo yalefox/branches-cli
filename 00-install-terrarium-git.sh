@@ -302,6 +302,13 @@ deploy_containers() {
 check_ports() {
     log_step "Checking Ports"
     
+    # First, try to clean up any orphaned containers/networks from previous runs
+    log_info "Cleaning up orphaned containers..."
+    ${COMPOSE_CMD} down --remove-orphans 2>/dev/null || true
+    
+    # Small delay for Docker to release ports
+    sleep 2
+    
     local ports=("3000" "9000" "9001" "2222")
     local conflict=false
     
@@ -317,9 +324,26 @@ check_ports() {
                  local container_id=$(docker ps --format '{{.ID}}\t{{.Ports}}' | grep "$port->" | awk '{print $1}')
                  if [[ -n "$container_id" ]]; then
                      log_info "Freeing port $port (stopping container $container_id)..."
-                     docker stop "$container_id" >/dev/null
-                     docker rm "$container_id" >/dev/null
-                     continue # Resolved, check next port
+                     docker stop "$container_id" >/dev/null 2>&1 || true
+                     docker rm "$container_id" >/dev/null 2>&1 || true
+                     sleep 1
+                     # Re-check if port is now free
+                     if ! lsof -i ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+                         continue # Resolved, check next port
+                     fi
+                 fi
+                 
+                 # Docker holding port but no container - try force cleanup
+                 log_warn "Port $port held by Docker (orphaned binding)"
+                 echo -e "${YELLOW}Force release this port? This will restart Docker networking.${NC}"
+                 read -p "Force release? (y/N): " -r force_confirm
+                 if [[ "$force_confirm" =~ ^[Yy]$ ]]; then
+                     docker network prune -f >/dev/null 2>&1 || true
+                     sleep 2
+                     if ! lsof -i ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+                         log "Port $port freed"
+                         continue
+                     fi
                  fi
             fi
 
@@ -331,6 +355,7 @@ check_ports() {
     
     if [[ "$conflict" == "true" ]]; then
         log_error "Port conflicts detected. Please free up the ports listed above and try again."
+        log_info "Tip: Run 'docker compose down -v' to clean up, or restart Docker Desktop."
         exit 1
     fi
     
