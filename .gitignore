@@ -1,0 +1,27 @@
+# Environment files with secrets
+.env
+*.env.local
+
+# Generated files
+.password
+.runner_token
+
+# Data directories (in production)
+data/
+postgres-data/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Ansible
+*.retry

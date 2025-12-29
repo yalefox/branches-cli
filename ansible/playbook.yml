@@ -1,0 +1,261 @@
+---
+# =============================================================================
+# Terrarium Git - Ansible Playbook
+# =============================================================================
+# Automated deployment for production Linux servers
+# Usage: ansible-playbook -i inventory.yml ansible/playbook.yml
+# =============================================================================
+
+- name: Deploy Terrarium Git
+  hosts: all
+  become: yes
+  vars:
+    terrarium_git_dir: /opt/terrarium-git
+    domain: terrarium-git.terrarium.network
+    
+  tasks:
+    # =========================================================================
+    # Prerequisites
+    # =========================================================================
+    - name: Check OS family
+      debug:
+        msg: "Running on {{ ansible_os_family }}"
+
+    - name: Install required packages (Debian/Ubuntu)
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - curl
+          - openssl
+          - git
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install required packages (RedHat/CentOS)
+      yum:
+        name:
+          - docker
+          - docker-compose
+          - curl
+          - openssl
+          - git
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # =========================================================================
+    # Install Root CA
+    # =========================================================================
+    - name: Install Terrarium root CA
+      shell: curl -fsSL -k https://certs.terrarium.network/install.sh | bash
+      args:
+        creates: /usr/local/share/ca-certificates/terrarium-root-ca.crt
+      ignore_errors: yes
+
+    # =========================================================================
+    # Deploy Files
+    # =========================================================================
+    - name: Create terrarium-git directory
+      file:
+        path: "{{ terrarium_git_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create subdirectories
+      file:
+        path: "{{ terrarium_git_dir }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - nginx
+        - scripts
+        - backups
+
+    - name: Copy docker-compose.yml
+      copy:
+        src: ../docker-compose.yml
+        dest: "{{ terrarium_git_dir }}/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copy config.yaml
+      copy:
+        src: ../config.yaml
+        dest: "{{ terrarium_git_dir }}/config.yaml"
+        mode: '0644'
+
+    - name: Copy nginx config
+      copy:
+        src: ../nginx/nginx.conf
+        dest: "{{ terrarium_git_dir }}/nginx/nginx.conf"
+        mode: '0644'
+
+    - name: Copy .env.example
+      copy:
+        src: ../.env.example
+        dest: "{{ terrarium_git_dir }}/.env.example"
+        mode: '0644'
+
+    - name: Copy install script
+      copy:
+        src: ../00-install-terrarium-git.sh
+        dest: "{{ terrarium_git_dir }}/00-install-terrarium-git.sh"
+        mode: '0755'
+
+    - name: Copy helper scripts
+      copy:
+        src: "../scripts/{{ item }}"
+        dest: "{{ terrarium_git_dir }}/scripts/{{ item }}"
+        mode: '0755'
+      loop:
+        - setup-runners.sh
+        - backup.sh
+        - update.sh
+
+    # =========================================================================
+    # Check for existing .env
+    # =========================================================================
+    - name: Check if .env exists
+      stat:
+        path: "{{ terrarium_git_dir }}/.env"
+      register: env_file
+
+    - name: Generate .env if not exists
+      shell: |
+        cd {{ terrarium_git_dir }}
+        cp .env.example .env
+        POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
+        ADMIN_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
+        sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
+        sed -i "s/ADMIN_PASSWORD=.*/ADMIN_PASSWORD=${ADMIN_PASSWORD}/" .env
+        echo "${ADMIN_PASSWORD}" > .password
+        chmod 600 .password .env
+      when: not env_file.stat.exists
+
+    # =========================================================================
+    # Deploy Containers
+    # =========================================================================
+    - name: Pull Docker images
+      shell: docker-compose pull
+      args:
+        chdir: "{{ terrarium_git_dir }}"
+
+    - name: Start PostgreSQL
+      shell: docker-compose up -d postgres
+      args:
+        chdir: "{{ terrarium_git_dir }}"
+
+    - name: Wait for PostgreSQL to be healthy
+      shell: |
+        for i in $(seq 1 30); do
+          if docker inspect --format='{{.State.Health.Status}}' terrarium-git-postgres 2>/dev/null | grep -q "healthy"; then
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+      args:
+        chdir: "{{ terrarium_git_dir }}"
+
+    - name: Start Gitea and supporting services
+      shell: docker-compose up -d gitea nginx buildx watchtower
+      args:
+        chdir: "{{ terrarium_git_dir }}"
+
+    - name: Wait for Gitea to be healthy
+      shell: |
+        for i in $(seq 1 60); do
+          if docker inspect --format='{{.State.Health.Status}}' terrarium-git-server 2>/dev/null | grep -q "healthy"; then
+            exit 0
+          fi
+          sleep 3
+        done
+        exit 1
+      args:
+        chdir: "{{ terrarium_git_dir }}"
+
+    # =========================================================================
+    # Create Admin User
+    # =========================================================================
+    - name: Check if admin user exists
+      shell: docker exec terrarium-git-server gitea admin user list 2>/dev/null | grep -q yalefox
+      register: admin_exists
+      ignore_errors: yes
+
+    - name: Read admin password
+      slurp:
+        src: "{{ terrarium_git_dir }}/.password"
+      register: admin_password_b64
+      when: admin_exists.rc != 0
+
+    - name: Create admin user
+      shell: |
+        source {{ terrarium_git_dir }}/.env
+        docker exec --user 1000:1000 terrarium-git-server gitea admin user create \
+          --username "${ADMIN_USERNAME}" \
+          --password "${ADMIN_PASSWORD}" \
+          --email "${ADMIN_EMAIL}" \
+          --admin \
+          --must-change-password=false
+      args:
+        executable: /bin/bash
+        chdir: "{{ terrarium_git_dir }}"
+      when: admin_exists.rc != 0
+      ignore_errors: yes
+
+    # =========================================================================
+    # Configure OIDC
+    # =========================================================================
+    - name: Check if OIDC is configured
+      shell: docker exec terrarium-git-server gitea admin auth list 2>/dev/null | grep -qi pocket
+      register: oidc_exists
+      ignore_errors: yes
+
+    - name: Configure OIDC
+      shell: |
+        source {{ terrarium_git_dir }}/.env
+        docker exec --user 1000:1000 terrarium-git-server gitea admin auth add-oauth \
+          --name "Pocket ID" \
+          --provider openidConnect \
+          --key "${OIDC_CLIENT_ID}" \
+          --secret "${OIDC_CLIENT_SECRET}" \
+          --auto-discover-url "${OIDC_DISCOVERY_URL}" \
+          --scopes "openid email profile"
+      args:
+        executable: /bin/bash
+        chdir: "{{ terrarium_git_dir }}"
+      when: oidc_exists.rc != 0
+      ignore_errors: yes
+
+    # =========================================================================
+    # Final Status
+    # =========================================================================
+    - name: Show container status
+      shell: docker-compose ps
+      args:
+        chdir: "{{ terrarium_git_dir }}"
+      register: compose_status
+
+    - name: Display status
+      debug:
+        msg: "{{ compose_status.stdout_lines }}"
+
+    - name: Display access info
+      debug:
+        msg:
+          - "========================================="
+          - "Terrarium Git deployed successfully!"
+          - "========================================="
+          - "Access: https://{{ domain }}"
+          - "Admin user: yalefox"
+          - "Password: Check {{ terrarium_git_dir }}/.password"
+          - ""
+          - "Next: Configure runner token via web UI"
+          - "Then: {{ terrarium_git_dir }}/scripts/setup-runners.sh <TOKEN>"
+          - "========================================="

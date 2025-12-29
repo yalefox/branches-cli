@@ -1,0 +1,47 @@
+# =============================================================================
+# Gitea Act Runner Configuration
+# =============================================================================
+# This configures how runners execute workflow jobs
+# =============================================================================
+
+log:
+  level: info
+
+runner:
+  file: .runner
+  capacity: 2
+  envs: {}
+  env_file: .env
+  timeout: 3h
+  shutdown_timeout: 0s
+  insecure: false
+  fetch_timeout: 5s
+  fetch_interval: 2s
+  labels:
+    - "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
+    - "ubuntu-22.04:docker://docker.gitea.com/runner-images:ubuntu-22.04"
+    - "ubuntu-24.04:docker://docker.gitea.com/runner-images:ubuntu-24.04"
+
+cache:
+  enabled: true
+  dir: /data/cache
+  host: ""
+  port: 0
+  external_server: ""
+
+container:
+  # Connect job containers to gitea network so they can reach internal services
+  network: "terrarium-git_gitea-network"
+  privileged: true
+  # Docker socket access for building images
+  options: "-v /var/run/docker.sock:/var/run/docker.sock"
+  workdir_parent:
+  valid_volumes:
+    - /var/run/docker.sock
+    - /etc/ssl/certs
+  docker_host: ""
+  force_pull: false
+  force_rebuild: false
+
+host:
+  workdir_parent:
