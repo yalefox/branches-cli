@@ -2,6 +2,10 @@
 # Gitea Act Runner Configuration
 # =============================================================================
 # This configures how runners execute workflow jobs
+# 
+# IMPORTANT: Job containers need special networking to reach Gitea:
+# - network: joins the gitea network so containers can use internal DNS
+# - --add-host: allows containers to resolve the external domain
 # =============================================================================
 
 log:
@@ -30,15 +34,22 @@ cache:
   external_server: ""
 
 container:
-  # Connect job containers to gitea network so they can reach internal services
+  # CRITICAL: Connect job containers to gitea network
+  # This allows them to resolve 'gitea' and other internal service names
   network: "terrarium-git_gitea-network"
+  
   privileged: true
-  # Docker socket access for building images
-  options: "-v /var/run/docker.sock:/var/run/docker.sock"
+  
+  # CRITICAL: Add host entry so job containers can resolve the external domain
+  # __SERVER_IP__ and __DOMAIN__ are replaced by the install script
+  # Also mount docker socket for building images
+  options: "-v /var/run/docker.sock:/var/run/docker.sock --add-host=__DOMAIN__:__SERVER_IP__"
+  
   workdir_parent:
   valid_volumes:
     - /var/run/docker.sock
     - /etc/ssl/certs
+    - /etc/pki/ca-trust
   docker_host: ""
   force_pull: false
   force_rebuild: false

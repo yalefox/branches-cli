@@ -234,6 +234,28 @@ setup_environment() {
     
     # Re-source to get updated values
     source .env
+    
+    # Generate config.yaml from template with actual SERVER_IP and DOMAIN
+    if [[ -f config.yaml.template ]]; then
+        log_info "Generating config.yaml with network settings..."
+        
+        # Determine SERVER_IP if not set
+        if [[ -z "${SERVER_IP:-}" ]]; then
+            if [[ "$OS_TYPE" == "macos" ]]; then
+                SERVER_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "host.docker.internal")
+            else
+                SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+            fi
+            log_info "Auto-detected SERVER_IP: ${SERVER_IP}"
+        fi
+        
+        # Replace placeholders in template
+        sed -e "s/__SERVER_IP__/${SERVER_IP}/g" \
+            -e "s/__DOMAIN__/${DOMAIN:-terrarium-git.terrarium.network}/g" \
+            config.yaml.template > config.yaml
+        
+        log "config.yaml generated with --add-host=${DOMAIN}:${SERVER_IP}"
+    fi
 }
 
 # =============================================================================
