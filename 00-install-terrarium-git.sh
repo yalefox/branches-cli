@@ -305,6 +305,7 @@ check_ports() {
     # First, try to clean up any orphaned containers/networks from previous runs
     log_info "Cleaning up orphaned containers..."
     ${COMPOSE_CMD} down --remove-orphans 2>/dev/null || true
+    docker network prune -f >/dev/null 2>&1 || true
     
     # Small delay for Docker to release ports
     sleep 2
