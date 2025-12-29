@@ -272,6 +272,88 @@ deploy_containers() {
         docker logs terrarium-git-postgres --tail 20
         exit 1
     fi
+}
+
+check_ports() {
+    log_step "Checking Ports"
+    
+    local ports=("3000" "9000" "9001" "2222")
+    local conflict=false
+    
+    for port in "${ports[@]}"; do
+        if lsof -i ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+            log_warn "Port $port is in use"
+            conflict=true
+            
+            # Try to identify what is using it
+            local pid=$(lsof -i ":$port" -sTCP:LISTEN -t | head -n 1)
+            local name=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
+            
+            log_info "Process using port $port: $name (PID: $pid)"
+            
+            # If it's docker, we can try to clean up
+            if [[ "$name" == *"com.docker"* ]] || [[ "$name" == *"docker"* ]]; then
+                 log_info "Attempting to stop Docker containers using port $port..."
+                 # Find container ID using this port
+                 local container_id=$(docker ps --format '{{.ID}}\t{{.Ports}}' | grep "$port->" | awk '{print $1}')
+                 if [[ -n "$container_id" ]]; then
+                     docker stop "$container_id" >/dev/null
+                     docker rm "$container_id" >/dev/null
+                     log "Stopped conflicting container: $container_id"
+                     conflict=false # Resolved
+                 fi
+            fi
+        fi
+    done
+    
+    if [[ "$conflict" == "true" ]]; then
+        log_error "Port conflicts detected. Please free up the ports listed above and try again."
+        exit 1
+    fi
+    
+    log "Ports are clear"
+}
+
+# =============================================================================
+# DOCKER DEPLOYMENT
+# =============================================================================
+deploy_containers() {
+    log_step "Deploying Docker Containers"
+    
+    cd "${SCRIPT_DIR}"
+    
+    # Check ports before starting
+    check_ports
+    
+    # Pull latest images
+    # Pull latest images
+    log_info "Pulling Docker images..."
+    ${COMPOSE_CMD} pull
+    
+    # Start PostgreSQL first
+    log_info "Starting PostgreSQL..."
+    ${COMPOSE_CMD} up -d postgres
+    
+    # Wait for PostgreSQL to be healthy
+    log_info "Waiting for PostgreSQL to be ready..."
+    local attempts=0
+    local max_attempts=30
+    while [[ $attempts -lt $max_attempts ]]; do
+        if docker inspect --format='{{.State.Health.Status}}' terrarium-git-postgres 2>/dev/null | grep -q "healthy"; then
+            log "PostgreSQL is healthy"
+            break
+        fi
+        echo -n "."
+        sleep 2
+        ((attempts++))
+    done
+    echo ""
+    
+    if [[ $attempts -ge $max_attempts ]]; then
+        log_error "PostgreSQL failed to become healthy"
+        docker logs terrarium-git-postgres --tail 20
+        exit 1
+    fi
     
     # Start Gitea, Nginx, Buildx, Watchtower
     log_info "Starting Gitea and supporting services..."
