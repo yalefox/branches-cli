@@ -112,6 +112,30 @@ install_root_ca() {
         return 0
     fi
     
+    # On macOS, check if the CA is already in the Keychain
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        if security find-certificate -c "TerrariumOS Root CA" /Library/Keychains/System.keychain &>/dev/null || \
+           security find-certificate -c "TerrariumOS Root CA" ~/Library/Keychains/login.keychain-db &>/dev/null; then
+            log "Terrarium Root CA already installed in Keychain"
+            return 0
+        fi
+        
+        # CA not found - inform user but DON'T try to install (avoids TouchID prompt)
+        log_info "Terrarium Root CA not found in Keychain"
+        echo ""
+        echo -e "${YELLOW}To install the Terrarium Root CA manually:${NC}"
+        echo -e "  1. Download: ${CYAN}curl -fsSL -k https://certs.terrarium.network/terrarium-root-ca.crt -o ~/Downloads/terrarium-root-ca.crt${NC}"
+        echo -e "  2. Open the file in Finder → double-click to add to Keychain"
+        echo -e "  3. Open Keychain Access → find 'TerrariumOS Root CA' → Trust → Always Trust"
+        echo ""
+        echo -e "${BLUE}Or run this command (will prompt for TouchID/password):${NC}"
+        echo -e "  ${CYAN}curl -fsSL -k https://certs.terrarium.network/install.sh | sudo bash${NC}"
+        echo ""
+        log_warn "Continuing without root CA - HTTPS may show certificate warnings"
+        return 0
+    fi
+    
+    # On Linux, we can install automatically
     log_info "Installing root CA from certs.terrarium.network..."
     
     if curl -fsSL -k https://certs.terrarium.network/install.sh | sudo bash; then
@@ -160,21 +184,44 @@ setup_environment() {
                 log "Admin password generated and saved to ${PASSWORD_FILE}"
             fi
         fi
+        
+        # Generate MinIO credentials if needed
+        if [[ "${MINIO_ROOT_USER:-GENERATE_ME_FIRST}" == "GENERATE_ME_FIRST" ]]; then
+            MINIO_ROOT_USER="admin-$(openssl rand -hex 4)"
+            MINIO_ROOT_PASSWORD=$(generate_password)
+            sed -i.bak "s/MINIO_ROOT_USER=.*/MINIO_ROOT_USER=${MINIO_ROOT_USER}/" .env
+            sed -i.bak "s/MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}/" .env
+            rm -f .env.bak
+            log "MinIO credentials generated"
+        fi
     else
         log_info "Creating .env from template..."
-        cp .env.example .env
+        
+        # Use staging template by default
+        if [[ -f .env.staging ]]; then
+            cp .env.staging .env
+        elif [[ -f .env.example ]]; then
+            cp .env.example .env
+        else
+            log_error "No .env template found!"
+            exit 1
+        fi
         
         # Generate passwords
         POSTGRES_PASSWORD=$(generate_password)
         ADMIN_PASSWORD=$(generate_password)
+        MINIO_ROOT_USER="admin-$(openssl rand -hex 4)"
+        MINIO_ROOT_PASSWORD=$(generate_password)
         
         # Save admin password for idempotency
         echo "${ADMIN_PASSWORD}" > "${PASSWORD_FILE}"
         chmod 600 "${PASSWORD_FILE}"
         
-        # Update .env
+        # Update .env with all generated values
         sed -i.bak "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
         sed -i.bak "s/ADMIN_PASSWORD=.*/ADMIN_PASSWORD=${ADMIN_PASSWORD}/" .env
+        sed -i.bak "s/MINIO_ROOT_USER=.*/MINIO_ROOT_USER=${MINIO_ROOT_USER}/" .env
+        sed -i.bak "s/MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}/" .env
         rm -f .env.bak
         
         log ".env created with generated passwords"
@@ -182,6 +229,9 @@ setup_environment() {
     
     # Re-source to get updated values
     source .env
+    
+    # Debug: verify MinIO vars are set
+    id
 }
 
 # =============================================================================
