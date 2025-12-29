@@ -113,9 +113,12 @@ install_root_ca() {
     fi
     
     # On macOS, check if the CA is already in the Keychain
+    # Check for both "TerrariumOS Root CA" and legacy "appliedscience Internal CA Root CA"
     if [[ "$OS_TYPE" == "macos" ]]; then
         if security find-certificate -c "TerrariumOS Root CA" /Library/Keychains/System.keychain &>/dev/null || \
-           security find-certificate -c "TerrariumOS Root CA" ~/Library/Keychains/login.keychain-db &>/dev/null; then
+           security find-certificate -c "TerrariumOS Root CA" ~/Library/Keychains/login.keychain-db &>/dev/null || \
+           security find-certificate -c "appliedscience Internal CA Root CA" /Library/Keychains/System.keychain &>/dev/null || \
+           security find-certificate -c "appliedscience Internal CA Root CA" ~/Library/Keychains/login.keychain-db &>/dev/null; then
             log "Terrarium Root CA already installed in Keychain"
             return 0
         fi
