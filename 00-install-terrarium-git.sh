@@ -431,6 +431,35 @@ deploy_containers() {
 }
 
 # =============================================================================
+# SSH KEYS
+# =============================================================================
+generate_runner_keys() {
+    log_step "Generating Runner SSH Keys"
+    
+    cd "${SCRIPT_DIR}"
+    
+    # Check if keys already exist
+    if [[ -f ssh/id_ed25519 ]] && [[ -f ssh/id_ed25519.pub ]]; then
+        log "SSH keys for runners already exist (idempotent)"
+        
+        # Ensure correct permissions
+        chmod 600 ssh/id_ed25519
+        chmod 644 ssh/id_ed25519.pub
+        return 0
+    fi
+    
+    log_info "Generating new Ed25519 SSH keypair..."
+    mkdir -p ssh
+    ssh-keygen -t ed25519 -f ssh/id_ed25519 -N "" -C "runner@terrarium-git" >/dev/null 2>&1
+    
+    # Fix permissions for mounting
+    chmod 600 ssh/id_ed25519
+    chmod 644 ssh/id_ed25519.pub
+    
+    log "SSH keys generated in ./ssh/"
+}
+
+# =============================================================================
 # ADMIN USER CREATION
 # =============================================================================
 create_admin_user() {
@@ -685,6 +714,7 @@ main() {
     # Installation steps
     install_root_ca
     setup_environment
+    generate_runner_keys
     deploy_containers
     create_admin_user
     configure_oidc

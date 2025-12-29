@@ -10,7 +10,7 @@
 # - OIDC authentication
 # =============================================================================
 
-set -euo pipefail
+# set -euo pipefail (Disabled to allow tests to fail without stopping script)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${SCRIPT_DIR}/.env"
@@ -134,15 +134,18 @@ test_git_operations() {
     
     # Test push-to-create (if authenticated)
     log_test "Push-to-create capability"
+    # Test push-to-create (if authenticated)
+    log_test "Push-to-create capability"
     if grep -q "ENABLE_PUSH_CREATE_USER=true" "${SCRIPT_DIR}/.env" 2>/dev/null || \
        grep -q "ENABLE_PUSH_CREATE_ORG=true" "${SCRIPT_DIR}/.env" 2>/dev/null; then
         log_pass "Push-to-create is enabled in configuration"
     else
         log_info "Push-to-create: checking Gitea config..."
-        if docker exec terrarium-git-server gitea config | grep -qi "ENABLE_PUSH_CREATE"; then
-            log_pass "Push-to-create enabled"
+        # app.ini check (CLI config command is deprecated/removed in some versions)
+        if docker exec terrarium-git-server grep -qi "ENABLE_PUSH_CREATE_USER.*true" /data/gitea/conf/app.ini 2>/dev/null; then
+             log_pass "Push-to-create enabled (verified in app.ini)"
         else
-            log_skip "Push-to-create status unknown"
+            log_skip "Push-to-create status unknown (could not verify in app.ini)"
         fi
     fi
     
