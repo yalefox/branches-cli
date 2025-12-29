@@ -564,12 +564,40 @@ display_results() {
 }
 
 # =============================================================================
-# DESTROY (cleanup)
+# CLEANUP (no confirmation - for development use)
+# =============================================================================
+clean_local() {
+    log_step "Cleaning Up Local Deployment"
+    
+    cd "${SCRIPT_DIR}"
+    
+    log_info "Stopping and removing containers..."
+    ${COMPOSE_CMD} down -v --remove-orphans 2>/dev/null || true
+    
+    log_info "Removing generated files..."
+    rm -f "${INSTALL_MARKER}" .env config.yaml
+    
+    # Keep password file for potential re-use
+    if [[ -f "${PASSWORD_FILE}" ]]; then
+        log_info "Keeping ${PASSWORD_FILE} for future installs"
+    fi
+    
+    log_info "Pruning unused Docker resources..."
+    docker network prune -f 2>/dev/null || true
+    docker volume prune -f 2>/dev/null || true
+    
+    log "Local deployment cleaned up"
+    log_info "Ready for production deployment or fresh install"
+}
+
+# =============================================================================
+# DESTROY (full cleanup with confirmation - removes password too)
 # =============================================================================
 destroy_all() {
     log_step "DESTROYING ALL CONTAINERS AND DATA"
     
     echo -e "${RED}WARNING: This will remove all containers, volumes, and data!${NC}"
+    echo -e "${RED}This includes your saved admin password.${NC}"
     read -p "Type 'DESTROY' to confirm: " -r confirm
     
     if [[ "$confirm" != "DESTROY" ]]; then
@@ -581,10 +609,14 @@ destroy_all() {
     
     ${COMPOSE_CMD} down -v --remove-orphans 2>/dev/null || true
     
-    rm -f "${INSTALL_MARKER}" "${PASSWORD_FILE}" .env
+    rm -f "${INSTALL_MARKER}" "${PASSWORD_FILE}" .env config.yaml .minio-credentials
+    rm -rf ssh/.runner* 2>/dev/null || true
     
-    log "All containers and data removed"
-    log_info "Run this script again for a fresh install"
+    docker network prune -f 2>/dev/null || true
+    docker volume prune -f 2>/dev/null || true
+    
+    log "All containers, data, and credentials removed"
+    log_info "Run this script again for a completely fresh install"
 }
 
 # =============================================================================
@@ -608,7 +640,8 @@ main() {
                 echo "  --help          Show this help message"
                 echo "  --check         Check prerequisites only"
                 echo "  --skip-certs    Skip root CA installation"
-                echo "  --destroy       Remove all containers and volumes (DESTRUCTIVE)"
+                echo "  --clean         Clean up local deployment (keeps password)"
+                echo "  --destroy       Remove everything including credentials (DESTRUCTIVE)"
                 exit 0
                 ;;
             --check)
@@ -616,6 +649,12 @@ main() {
                 ;;
             --skip-certs)
                 SKIP_CERTS=true
+                ;;
+            --clean)
+                detect_os
+                check_docker_compose
+                clean_local
+                exit 0
                 ;;
             --destroy)
                 detect_os

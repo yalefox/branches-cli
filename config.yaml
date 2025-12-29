@@ -41,9 +41,9 @@ container:
   privileged: true
   
   # CRITICAL: Add host entry so job containers can resolve the external domain
-  # 192.168.1.41 and terrarium-git.terrarium.network are replaced by the install script
+  # host.docker.internal and terrarium-git.terrarium.network are replaced by the install script
   # Also mount docker socket for building images
-  options: "-v /var/run/docker.sock:/var/run/docker.sock --add-host=terrarium-git.terrarium.network:192.168.1.41"
+  options: "-v /var/run/docker.sock:/var/run/docker.sock --add-host=terrarium-git.terrarium.network:host.docker.internal"
   
   workdir_parent:
   valid_volumes:
