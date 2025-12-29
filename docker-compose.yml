@@ -250,6 +250,34 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  # ===========================================================================
+  # WAZUH AGENT - Security Monitoring and Log Shipping
+  # ===========================================================================
+  # Sends logs to central Wazuh server at wazuh.terrarium.network
+  wazuh-agent:
+    image: wazuh/wazuh-agent:${WAZUH_VERSION:-4.14.1}
+    container_name: terrarium-git-wazuh-agent
+    restart: always
+    hostname: ${DOMAIN:-terrarium-git.terrarium.network}
+    environment:
+      - WAZUH_MANAGER=${WAZUH_MANAGER:-wazuh.terrarium.network}
+      - WAZUH_AGENT_GROUP=${WAZUH_AGENT_GROUP:-terrarium-services}
+      - WAZUH_AGENT_NAME=${DOMAIN:-terrarium-git.terrarium.network}
+    volumes:
+      # Read logs from other containers
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Persist agent data
+      - wazuh-agent-data:/var/ossec/data
+      # Custom agent configuration
+      - ./wazuh/ossec.conf:/var/ossec/etc/ossec.conf:ro
+    networks:
+      - gitea-network
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+
 volumes:
   postgres-data:
     driver: local
@@ -262,4 +290,6 @@ volumes:
   runner2-data:
     driver: local
   buildx-data:
+    driver: local
+  wazuh-agent-data:
     driver: local

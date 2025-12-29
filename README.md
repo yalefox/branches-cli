@@ -1,4 +1,7 @@
-# Terrarium Git
+# AUTOMATION REPO feat TERRARIUM-GIT
+
+- list off the runners
+- backup strategy
 
 **Self-hosted Git server with CI/CD, MinIO LFS, OIDC, and multi-arch builds**
 
