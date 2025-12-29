@@ -120,18 +120,23 @@ install_root_ca() {
             return 0
         fi
         
-        # CA not found - inform user but DON'T try to install (avoids TouchID prompt)
+        # CA not found - prompt user
         log_info "Terrarium Root CA not found in Keychain"
-        echo ""
-        echo -e "${YELLOW}To install the Terrarium Root CA manually:${NC}"
-        echo -e "  1. Download: ${CYAN}curl -fsSL -k https://certs.terrarium.network/terrarium-root-ca.crt -o ~/Downloads/terrarium-root-ca.crt${NC}"
-        echo -e "  2. Open the file in Finder → double-click to add to Keychain"
-        echo -e "  3. Open Keychain Access → find 'TerrariumOS Root CA' → Trust → Always Trust"
-        echo ""
-        echo -e "${BLUE}Or run this command (will prompt for TouchID/password):${NC}"
-        echo -e "  ${CYAN}curl -fsSL -k https://certs.terrarium.network/install.sh | sudo bash${NC}"
-        echo ""
-        log_warn "Continuing without root CA - HTTPS may show certificate warnings"
+        echo -e "${YELLOW}Do you want to install the Root CA now?${NC}"
+        echo -e "This will prompt for TouchID / Admin Password."
+        read -p "Install CA? (y/N): " -r install_confirm
+        
+        if [[ "$install_confirm" =~ ^[Yy]$ ]]; then
+            log_info "Installing root CA from certs.terrarium.network..."
+            if curl -fsSL -k https://certs.terrarium.network/install.sh | sudo bash; then
+                log "Root CA installed successfully"
+            else
+                log_warn "Root CA installation failed"
+            fi
+        else
+            log_warn "Skipping root CA installation. HTTPS may show certificate warnings."
+            echo -e "To install manually later: ${CYAN}curl -fsSL -k https://certs.terrarium.network/install.sh | sudo bash${NC}"
+        fi
         return 0
     fi
     
