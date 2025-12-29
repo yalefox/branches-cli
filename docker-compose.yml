@@ -247,6 +247,8 @@ services:
       - TZ=UTC
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - gitea-network
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 

@@ -404,9 +404,9 @@ deploy_containers() {
         exit 1
     fi
     
-    # Start Gitea, Nginx, Buildx, Watchtower
+    # Start Gitea, Nginx, Buildx, Watchtower, Wazuh
     log_info "Starting Gitea and supporting services..."
-    ${COMPOSE_CMD} up -d gitea nginx buildx watchtower
+    ${COMPOSE_CMD} up -d gitea nginx buildx watchtower wazuh-agent
     
     # Wait for Gitea to be healthy
     log_info "Waiting for Gitea to be ready (this may take 1-2 minutes on first start)..."
