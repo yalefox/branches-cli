@@ -535,6 +535,14 @@ main() {
     deploy_containers
     create_admin_user
     configure_oidc
+    
+    # Run verification tests
+    if [[ -f "${SCRIPT_DIR}/scripts/test-deployment.sh" ]]; then
+        log_step "Verifying Deployment"
+        chmod +x "${SCRIPT_DIR}/scripts/test-deployment.sh"
+        "${SCRIPT_DIR}/scripts/test-deployment.sh" || log_warn "Some verification tests failed - check output above"
+    fi
+    
     display_results
 }
 
