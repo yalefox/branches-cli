@@ -107,9 +107,32 @@ generate_password() {
 install_root_ca() {
     log_step "Installing Terrarium Root CA"
     
+    export_host_ca() {
+        if [[ "$OS_TYPE" == "macos" ]]; then
+             if security find-certificate -c "TerrariumOS Root CA" -p > "${SCRIPT_DIR}/root-ca.pem" 2>/dev/null && grep -q "BEGIN CERTIFICATE" "${SCRIPT_DIR}/root-ca.pem"; then
+                 return 0
+             fi
+             if security find-certificate -c "appliedscience Internal CA Root CA" -p > "${SCRIPT_DIR}/root-ca.pem" 2>/dev/null && grep -q "BEGIN CERTIFICATE" "${SCRIPT_DIR}/root-ca.pem"; then
+                 return 0
+             fi
+        fi
+        return 1
+    }
+
     if [[ "${SKIP_CERTS:-false}" == "true" ]]; then
         log_warn "Skipping root CA installation (--skip-certs)"
+        # Still try to get CA for containers
+        if ! export_host_ca; then
+             curl -fsSL -k "https://certs.terrarium.network/root-ca.pem" -o "${SCRIPT_DIR}/root-ca.pem" 2>/dev/null || true
+        fi
         return 0
+    fi
+    
+    # Get Root CA for Docker containers
+    log_info "Acquiring root-ca.pem for Docker containers..."
+    if ! export_host_ca; then
+        curl -fsSL -k "https://certs.terrarium.network/root-ca.pem" -o "${SCRIPT_DIR}/root-ca.pem" || \
+        curl -fsSL -k "https://certs.appliedscience.network/root-ca.pem" -o "${SCRIPT_DIR}/root-ca.pem"
     fi
     
     # On macOS, check if the CA is already in the Keychain
