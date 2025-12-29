@@ -2,7 +2,7 @@
 # Terrarium Git - Docker Compose Stack
 # =============================================================================
 # Domain: terrarium-git.terrarium.network
-# Components: PostgreSQL, Gitea, Nginx, Runners, Buildx, Watchtower
+# Components: PostgreSQL, Gitea, Nginx, MinIO, Runners, Buildx, Watchtower
 # =============================================================================
 
 networks:
@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ${POSTGRES_DATA:-postgres-data}:/var/lib/postgresql/data
     networks:
       - gitea-network
     healthcheck:
@@ -31,6 +31,38 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ===========================================================================
+  # MINIO - S3-Compatible Object Storage for Git LFS
+  # ===========================================================================
+  minio:
+    image: minio/minio:${MINIO_VERSION:-latest}
+    container_name: terrarium-git-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # OIDC Configuration
+      MINIO_IDENTITY_OPENID_CONFIG_URL: ${MINIO_OIDC_CONFIG_URL:-https://auth.terrarium.network/.well-known/openid-configuration}
+      MINIO_IDENTITY_OPENID_CLIENT_ID: ${MINIO_OIDC_CLIENT_ID}
+      MINIO_IDENTITY_OPENID_CLIENT_SECRET: ${MINIO_OIDC_CLIENT_SECRET}
+      MINIO_IDENTITY_OPENID_CLAIM_NAME: ${MINIO_OIDC_CLAIM_NAME:-policy}
+      MINIO_IDENTITY_OPENID_SCOPES: ${MINIO_OIDC_SCOPES:-openid,profile,email}
+      MINIO_IDENTITY_OPENID_REDIRECT_URI: https://${MINIO_DOMAIN:-terrarium-git-minio1.terrarium.network}/oauth_callback
+      MINIO_BROWSER_REDIRECT_URL: https://${MINIO_DOMAIN:-terrarium-git-minio1.terrarium.network}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ${MINIO_DATA:-minio-data}:/data
+    networks:
+      - gitea-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ===========================================================================
   # GITEA - Git Server
@@ -60,8 +92,14 @@ services:
       - GITEA__server__START_SSH_SERVER=true
       - GITEA__server__LFS_START_SERVER=true
       - GITEA__server__OFFLINE_MODE=false
-      # LFS
-      - GITEA__lfs__PATH=/data/lfs
+      # LFS - Using MinIO
+      - GITEA__lfs__STORAGE_TYPE=minio
+      - GITEA__lfs__MINIO_ENDPOINT=minio:9000
+      - GITEA__lfs__MINIO_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - GITEA__lfs__MINIO_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - GITEA__lfs__MINIO_BUCKET=${MINIO_LFS_BUCKET:-terrarium-git-lfs-01}
+      - GITEA__lfs__MINIO_LOCATION=us-east-1
+      - GITEA__lfs__MINIO_USE_SSL=false
       # Security
       - GITEA__security__INSTALL_LOCK=true
       # Service
@@ -88,16 +126,19 @@ services:
       - GITEA__mailer__FROM=${SMTP_FROM:-noreply@terrarium.network}
       # Logging
       - GITEA__log__MODE=console
-      - GITEA__log__LEVEL=info
+      - GITEA__log__LEVEL=${LOG_LEVEL:-info}
     volumes:
-      - gitea-data:/data
-      - gitea-lfs:/data/lfs
+      - ${GITEA_DATA:-gitea-data}:/data
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+      # SSH keys for runners
+      - ./ssh:/data/git/.ssh:ro
     networks:
       - gitea-network
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:3000/ || exit 1" ]
@@ -145,6 +186,7 @@ services:
       - runner1-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yaml:/config.yaml:ro
+      - ./ssh:/root/.ssh:ro
     networks:
       - gitea-network
     depends_on:
@@ -168,6 +210,7 @@ services:
       - runner2-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yaml:/config.yaml:ro
+      - ./ssh:/root/.ssh:ro
     networks:
       - gitea-network
     depends_on:
@@ -188,12 +231,14 @@ services:
       - gitea-network
 
   # ===========================================================================
-  # WATCHTOWER - Automatic Container Updates
+  # WATCHTOWER - Automatic Container Updates (disabled in production)
   # ===========================================================================
   watchtower:
     image: containrrr/watchtower:latest
     container_name: terrarium-git-watchtower
     restart: always
+    profiles:
+      - staging
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=86400
@@ -210,7 +255,7 @@ volumes:
     driver: local
   gitea-data:
     driver: local
-  gitea-lfs:
+  minio-data:
     driver: local
   runner1-data:
     driver: local

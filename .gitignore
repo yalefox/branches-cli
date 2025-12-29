@@ -4,10 +4,13 @@
 
 # Generated files
 .password
+.minio-credentials
 .runner_token
+.installed
 
-# Data directories (in production)
-data/
+# SSH keys (generated during install)
+ssh/id_*
+ssh/config
 postgres-data/
 
 # macOS
