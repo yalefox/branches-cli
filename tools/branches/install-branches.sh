@@ -254,6 +254,14 @@ BRANCHES_SCRIPT
     fi
     
     log "Branches CLI installed to ${INSTALL_DIR}/branches"
+    
+    # Run verification tests
+    local test_script="${script_dir}/test-branches.sh"
+    if [[ -f "$test_script" ]]; then
+        log_info "Running verification tests..."
+        chmod +x "$test_script"
+        "$test_script" "${INSTALL_DIR}/branches" || log_warn "Some tests failed - check output above"
+    fi
 }
 
 # =============================================================================
