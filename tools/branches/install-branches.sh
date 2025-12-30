@@ -67,6 +67,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
+YELLOW='\033[1;33m' # Explicitly define YELLOW for compatibility
 
 # =============================================================================
 # LOGGING
@@ -195,6 +196,7 @@ setup_gitea() {
     
     if [[ "$existing_logins" -gt 0 ]]; then
         echo -e "  Existing Gitea logins:"
+        # Pipe through cat to force simple output if needed or ensure utf-8
         tea login list
         read_input "  Add another Gitea server? [y/N]: " add_gitea
         if [[ "${add_gitea,,}" != "y" ]]; then
