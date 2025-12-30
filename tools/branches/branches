@@ -13,12 +13,13 @@
 #   pull               Pull from the correct service
 #   status             Show auth status for all services
 #   login <service>    Re-authenticate (gh/tea/glab)
+#   update             Update branches to latest version
 #   help               Show this help message
 # =============================================================================
 
 set -euo pipefail
 
-VERSION="2.8.0"
+VERSION="2.9.0"
 
 # =============================================================================
 # COLORS
@@ -104,6 +105,7 @@ cmd_help() {
     echo -e "  ${GREEN}pull${NC}               Pull from the correct service"
     echo -e "  ${GREEN}status${NC}             Show auth status for all services"
     echo -e "  ${GREEN}login${NC} <service>    Re-authenticate (gh, tea, or glab)"
+    echo -e "  ${GREEN}update${NC}             Update branches to latest version"
     echo -e "  ${GREEN}help${NC}               Show this help message"
     echo -e "  ${GREEN}version${NC}            Show version"
     echo ""
@@ -339,6 +341,57 @@ cmd_context() {
 }
 
 # =============================================================================
+# UPDATE
+# =============================================================================
+cmd_update() {
+    local current_version="$VERSION"
+    local install_path
+    install_path=$(command -v branches 2>/dev/null || echo "$HOME/.local/bin/branches")
+    local update_url="https://raw.githubusercontent.com/yalefox/branches-cli/main/tools/branches/branches"
+    
+    log_info "Current version: $current_version"
+    log_info "Checking for updates..."
+    
+    # Download to temp file first
+    local tmp_file
+    tmp_file=$(mktemp)
+    
+    if ! curl -fsSL "$update_url" -o "$tmp_file"; then
+        log_error "Failed to download update"
+        rm -f "$tmp_file"
+        return 1
+    fi
+    
+    # Get new version
+    local new_version
+    new_version=$(grep '^VERSION=' "$tmp_file" | head -1 | cut -d'"' -f2)
+    
+    if [[ -z "$new_version" ]]; then
+        log_error "Could not determine new version"
+        rm -f "$tmp_file"
+        return 1
+    fi
+    
+    if [[ "$new_version" == "$current_version" ]]; then
+        log "Already at latest version: $current_version"
+        rm -f "$tmp_file"
+        return 0
+    fi
+    
+    log_info "Updating: $current_version → $new_version"
+    
+    # Replace current installation
+    chmod +x "$tmp_file"
+    if mv "$tmp_file" "$install_path"; then
+        log "Updated to version $new_version"
+    else
+        log_error "Failed to install update (try with sudo?)"
+        rm -f "$tmp_file"
+        return 1
+    fi
+}
+
+# =============================================================================
 # MAIN
 # =============================================================================
 main() {
@@ -375,6 +428,9 @@ main() {
             ;;
         context)
             cmd_context "$@"
+            ;;
+        update)
+            cmd_update "$@"
             ;;
         help|--help|-h)
             cmd_help
