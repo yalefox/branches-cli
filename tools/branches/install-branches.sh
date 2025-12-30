@@ -12,6 +12,15 @@
 set -euo pipefail
 
 # =============================================================================
+# TRAP HANDLER
+# =============================================================================
+cleanup() {
+    echo -e "\n\n${YELLOW}⚠ Setup interrupted. Exiting gracefully.${NC}"
+    exit 1
+}
+trap cleanup SIGINT
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 INSTALL_DIR="${HOME}/.local/bin"
@@ -53,9 +62,9 @@ read_secret() {
 # =============================================================================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+BROWN='\033[0;33m'  # Using Yellow code as Brown
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
@@ -64,10 +73,10 @@ NC='\033[0m'
 # LOGGING
 # =============================================================================
 log()       { echo -e "${GREEN}✓${NC} $1"; }
-log_info()  { echo -e "${BLUE}→${NC} $1"; }
+log_info()  { echo -e "${BROWN}→${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
 log_error() { echo -e "${RED}✗${NC} $1"; }
-log_step()  { echo -e "\n${PURPLE}${BOLD}Step $1${NC}"; }
+log_step()  { echo -e "\n${GREEN}${BOLD}Step $1${NC}"; }
 
 # =============================================================================
 # BANNER
@@ -255,7 +264,10 @@ install_branches_cli() {
         cp "${script_dir}/branches" "${INSTALL_DIR}/branches"
     else
         log_info "Downloading branches CLI from GitHub..."
-        curl -fsSL "${SCRIPT_URL_BASE}/branches" -o "${INSTALL_DIR}/branches"
+        if ! curl -fsSL "${SCRIPT_URL_BASE}/branches" -o "${INSTALL_DIR}/branches"; then
+            log_error "Failed to download branches script"
+            exit 1
+        fi
     fi
     
     chmod +x "${INSTALL_DIR}/branches"
