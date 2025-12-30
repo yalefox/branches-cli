@@ -62,8 +62,7 @@ read_secret() {
 # =============================================================================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-BROWN='\033[0;33m'  # Using Yellow code as Brown
-YELLOW='\033[1;33m'
+BROWN='\033[0;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
@@ -74,19 +73,19 @@ NC='\033[0m'
 # =============================================================================
 log()       { echo -e "${GREEN}✓${NC} $1"; }
 log_info()  { echo -e "${BROWN}→${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
+log_warn()  { echo -e "${BROWN}⚠${NC} $1"; }
 log_error() { echo -e "${RED}✗${NC} $1"; }
-log_step()  { echo -e "\n${GREEN}${BOLD}Step $1${NC}"; }
+log_step()  { echo -e "\n${CYAN}${BOLD}Step $1${NC}"; }
 
 # =============================================================================
 # BANNER
 # =============================================================================
 show_banner() {
     echo ""
-    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}       ${BOLD}BRANCHES${NC} - Multi-Service Git CLI Setup           ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}       GitHub • Gitea • GitLab in one command            ${CYAN}║${NC}"
-    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║${NC}       ${BOLD}BRANCHES${NC} - Multi-Service Git CLI Setup           ${GREEN}║${NC}"
+    echo -e "${GREEN}║${NC}       GitHub • Gitea • GitLab in one command            ${GREEN}║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
 
