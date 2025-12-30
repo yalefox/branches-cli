@@ -1,0 +1,327 @@
+#!/bin/bash
+# =============================================================================
+# BRANCHES - Multi-Service Git CLI Wrapper
+# =============================================================================
+# Unified CLI for GitHub, Gitea, and GitLab operations.
+# Automatically detects the remote service and uses the appropriate CLI.
+#
+# Usage: branches <command> [args]
+#
+# Commands:
+#   clone <url>        Clone a repository
+#   push               Push to the correct service
+#   pull               Pull from the correct service
+#   status             Show auth status for all services
+#   login <service>    Re-authenticate (gh/tea/glab)
+#   help               Show this help message
+# =============================================================================
+
+set -euo pipefail
+
+VERSION="1.0.0"
+
+# =============================================================================
+# COLORS
+# =============================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+log()       { echo -e "${GREEN}✓${NC} $1"; }
+log_info()  { echo -e "${BLUE}→${NC} $1"; }
+log_warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
+log_error() { echo -e "${RED}✗${NC} $1" >&2; }
+
+# Detect which service a URL belongs to
+detect_service() {
+    local url="$1"
+    
+    if [[ "$url" == *"github.com"* ]]; then
+        echo "github"
+    elif [[ "$url" == *"gitlab.com"* ]]; then
+        echo "gitlab"
+    else
+        # Check if it matches any configured Gitea server
+        local gitea_hosts
+        gitea_hosts=$(tea login list 2>/dev/null | tail -n +3 | awk '{print $4}' | tr '\n' ' ')
+        
+        for host in $gitea_hosts; do
+            if [[ "$url" == *"$host"* ]]; then
+                echo "gitea"
+                return 0
+            fi
+        done
+        
+        # Check if glab knows this host (only if glab is installed)
+        if command -v glab &>/dev/null && glab auth status 2>&1 | grep -q "$(echo "$url" | sed 's|.*://||' | cut -d/ -f1)"; then
+            echo "gitlab"
+            return 0
+        fi
+        
+        # Default to plain git
+        echo "git"
+    fi
+}
+
+# Get the remote URL for the current repository
+get_remote_url() {
+    local remote="${1:-origin}"
+    git remote get-url "$remote" 2>/dev/null || echo ""
+}
+
+# Get the service for the current repository
+get_current_service() {
+    local url
+    url=$(get_remote_url)
+    if [[ -z "$url" ]]; then
+        echo "none"
+    else
+        detect_service "$url"
+    fi
+}
+
+# =============================================================================
+# COMMANDS
+# =============================================================================
+
+cmd_help() {
+    echo ""
+    echo -e "${CYAN}${BOLD}BRANCHES${NC} v${VERSION} - Multi-Service Git CLI"
+    echo ""
+    echo -e "${BOLD}USAGE:${NC}"
+    echo "  branches <command> [arguments]"
+    echo ""
+    echo -e "${BOLD}COMMANDS:${NC}"
+    echo -e "  ${GREEN}clone${NC} <url>        Clone a repository (auto-detects service)"
+    echo -e "  ${GREEN}push${NC}               Push to the correct service"
+    echo -e "  ${GREEN}pull${NC}               Pull from the correct service"
+    echo -e "  ${GREEN}status${NC}             Show auth status for all services"
+    echo -e "  ${GREEN}login${NC} <service>    Re-authenticate (gh, tea, or glab)"
+    echo -e "  ${GREEN}help${NC}               Show this help message"
+    echo -e "  ${GREEN}version${NC}            Show version"
+    echo ""
+    echo -e "${BOLD}EXAMPLES:${NC}"
+    echo "  branches clone https://github.com/user/repo.git"
+    echo "  branches push"
+    echo "  branches login gh"
+    echo "  branches status"
+    echo ""
+}
+
+cmd_version() {
+    echo "branches v${VERSION}"
+}
+
+cmd_status() {
+    echo ""
+    echo -e "${BOLD}Service Authentication Status${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────${NC}"
+    
+    # GitHub
+    echo -e "\n${BOLD}GitHub (gh):${NC}"
+    if gh auth status 2>&1; then
+        :
+    else
+        echo -e "  ${YELLOW}Not authenticated${NC}"
+    fi
+    
+    # Gitea
+    echo -e "\n${BOLD}Gitea (tea):${NC}"
+    local tea_output
+    tea_output=$(tea login list 2>&1)
+    if [[ $(echo "$tea_output" | tail -n +3 | wc -l) -gt 0 ]]; then
+        echo "$tea_output"
+    else
+        echo -e "  ${YELLOW}No Gitea servers configured${NC}"
+    fi
+    
+    # GitLab
+    echo -e "\n${BOLD}GitLab (glab):${NC}"
+    if ! command -v glab &>/dev/null; then
+        echo -e "  ${YELLOW}glab not installed${NC}"
+    elif glab auth status 2>&1; then
+        :
+    else
+        echo -e "  ${YELLOW}Not authenticated${NC}"
+    fi
+    
+    echo ""
+}
+
+cmd_login() {
+    local service="${1:-}"
+    
+    case "$service" in
+        gh|github)
+            log_info "Logging in to GitHub..."
+            gh auth login --web --git-protocol https
+            ;;
+        tea|gitea)
+            log_info "Adding Gitea server..."
+            read -p "Gitea server URL: " gitea_url
+            read -p "Gitea server name: " gitea_name
+            echo -e "${YELLOW}Generate a token at: ${gitea_url}/user/settings/applications${NC}"
+            read -sp "Gitea API token: " gitea_token
+            echo ""
+            tea login add --name "$gitea_name" --url "$gitea_url" --token "$gitea_token" --ssh-key ""
+            log "Gitea server added"
+            ;;
+        glab|gitlab)
+            if ! command -v glab &>/dev/null; then
+                log_error "glab is not installed. Install with: brew install glab"
+                exit 1
+            fi
+            log_info "Logging in to GitLab..."
+            glab auth login
+            ;;
+        "")
+            log_error "Usage: branches login <gh|tea|glab>"
+            exit 1
+            ;;
+        *)
+            log_error "Unknown service: $service"
+            log_info "Supported services: gh, tea, glab"
+            exit 1
+            ;;
+    esac
+}
+
+cmd_clone() {
+    local url="${1:-}"
+    
+    if [[ -z "$url" ]]; then
+        log_error "Usage: branches clone <url>"
+        exit 1
+    fi
+    
+    local service
+    service=$(detect_service "$url")
+    
+    log_info "Detected service: ${service}"
+    
+    case "$service" in
+        github)
+            # gh repo clone can handle various URL formats
+            if [[ "$url" == *"github.com"* ]]; then
+                # Extract owner/repo from URL
+                local repo_path
+                repo_path=$(echo "$url" | sed -E 's|.*github\.com[:/]||' | sed 's|\.git$||')
+                gh repo clone "$repo_path"
+            else
+                gh repo clone "$url"
+            fi
+            ;;
+        gitlab)
+            # glab repo clone
+            local repo_path
+            repo_path=$(echo "$url" | sed -E 's|.*gitlab\.com[:/]||' | sed 's|\.git$||')
+            glab repo clone "$repo_path" 2>/dev/null || git clone "$url"
+            ;;
+        gitea)
+            # tea doesn't have a native clone command, use git
+            git clone "$url"
+            ;;
+        *)
+            git clone "$url"
+            ;;
+    esac
+    
+    log "Repository cloned"
+}
+
+cmd_push() {
+    if ! git rev-parse --git-dir &>/dev/null; then
+        log_error "Not in a git repository"
+        exit 1
+    fi
+    
+    local service
+    service=$(get_current_service)
+    local branch
+    branch=$(git branch --show-current)
+    
+    log_info "Service: ${service} | Branch: ${branch}"
+    
+    case "$service" in
+        github)
+            git push -u origin "$branch"
+            ;;
+        gitlab)
+            git push -u origin "$branch"
+            ;;
+        gitea)
+            git push -u origin "$branch"
+            ;;
+        none)
+            log_error "No remote 'origin' configured"
+            exit 1
+            ;;
+        *)
+            git push -u origin "$branch"
+            ;;
+    esac
+    
+    log "Pushed to ${service}"
+}
+
+cmd_pull() {
+    if ! git rev-parse --git-dir &>/dev/null; then
+        log_error "Not in a git repository"
+        exit 1
+    fi
+    
+    local service
+    service=$(get_current_service)
+    
+    log_info "Service: ${service}"
+    
+    git pull
+    
+    log "Pulled from ${service}"
+}
+
+# =============================================================================
+# MAIN
+# =============================================================================
+main() {
+    local command="${1:-help}"
+    shift || true
+    
+    case "$command" in
+        clone)
+            cmd_clone "$@"
+            ;;
+        push)
+            cmd_push "$@"
+            ;;
+        pull)
+            cmd_pull "$@"
+            ;;
+        status)
+            cmd_status "$@"
+            ;;
+        login)
+            cmd_login "$@"
+            ;;
+        help|--help|-h)
+            cmd_help
+            ;;
+        version|--version|-v)
+            cmd_version
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            cmd_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
