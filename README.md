@@ -19,12 +19,12 @@
 
 ---
 
-## Quick Start
+## Quick Install (macOS)
 
-### Staging (macOS/Dev)
+Run this one-liner to install the latest version:
 
 ```bash
-git clone https://git.terrarium.network/yalefox/terrarium-git_official.git
+curl -fsSL https://raw.githubusercontent.com/yalefox/branches-cli/main/tools/branches/install-branches.sh | bash
 cd terrarium-git_official
 chmod +x 00-install-terrarium-git.sh
 ./00-install-terrarium-git.sh

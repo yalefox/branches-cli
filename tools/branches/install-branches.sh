@@ -315,6 +315,7 @@ show_completion() {
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║${NC}              ${BOLD}Setup Complete!${NC}                            ${GREEN}║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo -e "              Installed Version: ${installed_version}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo -e "  ${BOLD}branches clone${NC} <url>      Clone a repository"
