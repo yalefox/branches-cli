@@ -315,6 +315,8 @@ show_completion() {
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║${NC}              ${BOLD}Setup Complete!${NC}                            ${GREEN}║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
+    local installed_version
+    installed_version=$("${INSTALL_DIR}/branches" --version 2>/dev/null || echo "Unknown")
     echo -e "              Installed Version: ${installed_version}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
