@@ -83,8 +83,8 @@ log_step()  { echo -e "\n${CYAN}${BOLD}Step $1${NC}"; }
 show_banner() {
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}       ${BOLD}BRANCHES${NC} - Multi-Service Git CLI Setup           ${GREEN}║${NC}"
-    echo -e "${GREEN}║${NC}       GitHub • Gitea • GitLab in one command            ${GREEN}║${NC}"
+    echo -e "${GREEN}║${NC}        ${BOLD}BRANCHES${NC} by appliedscience                     ${GREEN}║${NC}"
+    echo -e "${GREEN}║${NC}          Universal Git Client (Agentic)                 ${GREEN}║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
