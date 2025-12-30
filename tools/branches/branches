@@ -287,11 +287,74 @@ cmd_pull() {
     log "Pulled from ${service}"
 }
 
+cmd_context() {
+    if ! git rev-parse --git-dir &>/dev/null; then
+        echo -e "${YELLOW}Not a git repository${NC}"
+        return 1
+    fi
+    
+    local service
+    service=$(get_current_service)
+    local remote_url
+    remote_url=$(get_remote_url)
+    local branch
+    branch=$(git branch --show-current)
+    
+    # Icons (requires Nerd Fonts or standard emoji)
+    local icon="📦"  # Default
+    local color="$NC"
+    local display_name="$service"
+    
+    case "$service" in
+        github)
+            icon=""  # GitHub logo or 🐙
+            color="$NC"   # GitHub is usually associated with white/black
+            display_name="GitHub"
+            ;;
+        gitlab)
+            icon=""  # GitLab logo or 🦊
+            color="$RED"
+            display_name="GitLab"
+            ;;
+        gitea)
+            icon="🍵" # Tea / Gitea
+            color="$GREEN"
+            display_name="Gitea"
+            ;;
+        git)
+            icon=""  # Git logo
+            color="$YELLOW"
+            display_name="Git"
+            ;;
+    esac
+    
+    echo ""
+    echo -e "  ${icon}  ${BOLD}${display_name}${NC}  ${color}${remote_url}${NC}"
+    echo -e "    ${branch}"
+    echo ""
+    
+    # Optional: Show short status
+    git status -s | head -5
+    echo ""
+}
+
 # =============================================================================
 # MAIN
 # =============================================================================
 main() {
-    local command="${1:-help}"
+    local command="${1:-}"
+    
+    # If no command provided, show context if in a git repo, otherwise show help
+    if [[ -z "$command" ]]; then
+        if git rev-parse --git-dir &>/dev/null; then
+            cmd_context
+            return 0
+        else
+            cmd_help
+            return 0
+        fi
+    fi
+    
     shift || true
     
     case "$command" in
@@ -309,6 +372,9 @@ main() {
             ;;
         login)
             cmd_login "$@"
+            ;;
+        context)
+            cmd_context "$@"
             ;;
         help|--help|-h)
             cmd_help

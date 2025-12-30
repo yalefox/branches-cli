@@ -15,7 +15,7 @@ set -euo pipefail
 # TRAP HANDLER
 # =============================================================================
 cleanup() {
-    echo -e "\n\n${YELLOW}⚠ Setup interrupted. Exiting gracefully.${NC}"
+    echo -e "\n\n${BROWN}⚠ Setup interrupted. Exiting gracefully.${NC}"
     exit 1
 }
 trap cleanup SIGINT
@@ -202,8 +202,8 @@ setup_gitea() {
             return 0
         fi
     else
-    read_input "  Set up a Gitea server now? [Y/n]: " setup_gitea
-        if [[ "${setup_gitea,,}" == "n" ]]; then
+        read_input "  Set up a Gitea server now? [Y/n]: " setup_gitea_prompt
+        if [[ "${setup_gitea_prompt,,}" == "n" ]]; then
             log_warn "Skipping Gitea setup (run 'branches login tea' later)"
             return 0
         fi
