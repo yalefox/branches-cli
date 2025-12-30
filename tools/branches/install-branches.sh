@@ -188,7 +188,6 @@ setup_gitea() {
     if [[ "$existing_logins" -gt 0 ]]; then
         echo -e "  Existing Gitea logins:"
         tea login list
-        tea login list
         read_input "  Add another Gitea server? [y/N]: " add_gitea
         if [[ "${add_gitea,,}" != "y" ]]; then
             log "Keeping existing Gitea logins"
