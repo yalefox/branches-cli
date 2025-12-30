@@ -16,7 +16,37 @@ set -euo pipefail
 # =============================================================================
 INSTALL_DIR="${HOME}/.local/bin"
 CONFIG_DIR="${HOME}/.config/branches"
-SCRIPT_URL_BASE="https://raw.githubusercontent.com/yalefox/terrarium-git/main/tools/branches"
+SCRIPT_URL_BASE="https://raw.githubusercontent.com/yalefox/branches-cli/main/tools/branches"
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+# Read input from terminal even if script is piped
+read_input() {
+    local prompt="$1"
+    local variable_name="$2"
+    local default_value="${3:-}"
+    
+    # Check if /dev/tty is available
+    if [[ -e /dev/tty ]]; then
+        read -p "$prompt" "$variable_name" < /dev/tty
+    else
+        read -p "$prompt" "$variable_name"
+    fi
+}
+
+read_secret() {
+    local prompt="$1"
+    local variable_name="$2"
+    
+    if [[ -e /dev/tty ]]; then
+        read -sp "$prompt" "$variable_name" < /dev/tty
+        echo ""
+    else
+        read -sp "$prompt" "$variable_name"
+        echo ""
+    fi
+}
 
 # =============================================================================
 # COLORS
@@ -104,7 +134,7 @@ configure_git() {
     
     if [[ -n "$current_name" && -n "$current_email" ]]; then
         echo -e "  Current identity: ${GREEN}${current_name}${NC} <${GREEN}${current_email}${NC}>"
-        read -p "  Keep this identity? [Y/n]: " keep_identity
+        read_input "  Keep this identity? [Y/n]: " keep_identity
         if [[ "${keep_identity,,}" != "n" ]]; then
             log "Keeping existing Git identity"
             return 0
@@ -112,8 +142,8 @@ configure_git() {
     fi
     
     echo ""
-    read -p "  Enter your full name: " git_name
-    read -p "  Enter your email: " git_email
+    read_input "  Enter your full name: " git_name
+    read_input "  Enter your email: " git_email
     
     git config --global user.name "$git_name"
     git config --global user.email "$git_email"
@@ -138,7 +168,7 @@ setup_github() {
         return 0
     fi
     
-    read -p "  Set up GitHub now? [Y/n]: " setup_gh
+    read_input "  Set up GitHub now? [Y/n]: " setup_gh
     if [[ "${setup_gh,,}" == "n" ]]; then
         log_warn "Skipping GitHub setup (run 'branches login gh' later)"
         return 0
@@ -158,13 +188,14 @@ setup_gitea() {
     if [[ "$existing_logins" -gt 0 ]]; then
         echo -e "  Existing Gitea logins:"
         tea login list
-        read -p "  Add another Gitea server? [y/N]: " add_gitea
+        tea login list
+        read_input "  Add another Gitea server? [y/N]: " add_gitea
         if [[ "${add_gitea,,}" != "y" ]]; then
             log "Keeping existing Gitea logins"
             return 0
         fi
     else
-        read -p "  Set up a Gitea server now? [Y/n]: " setup_gitea
+    read_input "  Set up a Gitea server now? [Y/n]: " setup_gitea
         if [[ "${setup_gitea,,}" == "n" ]]; then
             log_warn "Skipping Gitea setup (run 'branches login tea' later)"
             return 0
@@ -172,11 +203,11 @@ setup_gitea() {
     fi
     
     echo ""
-    read -p "  Gitea server URL (e.g., https://branches.terrarium.network): " gitea_url
-    read -p "  Gitea server name (e.g., branches): " gitea_name
+    read_input "  Gitea server URL (e.g., https://branches.terrarium.network): " gitea_url
+    read_input "  Gitea server name (e.g., branches): " gitea_name
     
     echo -e "  ${YELLOW}Generate a token at: ${gitea_url}/user/settings/applications${NC}"
-    read -sp "  Gitea API token: " gitea_token
+    read_secret "  Gitea API token: " gitea_token
     echo ""
     
     tea login add \
@@ -196,7 +227,7 @@ setup_gitlab() {
         return 0
     fi
     
-    read -p "  Set up GitLab now? [y/N]: " setup_gl
+    read_input "  Set up GitLab now? [y/N]: " setup_gl
     if [[ "${setup_gl,,}" != "y" ]]; then
         log_warn "Skipping GitLab setup (run 'branches login glab' later)"
         return 0
@@ -224,16 +255,8 @@ install_branches_cli() {
     if [[ -f "${script_dir}/branches" ]]; then
         cp "${script_dir}/branches" "${INSTALL_DIR}/branches"
     else
-        # Fallback: download from URL or create inline
-        cat > "${INSTALL_DIR}/branches" << 'BRANCHES_SCRIPT'
-#!/bin/bash
-# BRANCHES - Multi-Service Git CLI Wrapper
-# This is a placeholder - the real script should be installed alongside
-
-echo "Error: branches script not properly installed"
-echo "Re-run the installer: ./install-branches.sh"
-exit 1
-BRANCHES_SCRIPT
+        log_info "Downloading branches CLI from GitHub..."
+        curl -fsSL "${SCRIPT_URL_BASE}/branches" -o "${INSTALL_DIR}/branches"
     fi
     
     chmod +x "${INSTALL_DIR}/branches"
@@ -256,7 +279,15 @@ BRANCHES_SCRIPT
     log "Branches CLI installed to ${INSTALL_DIR}/branches"
     
     # Run verification tests
-    local test_script="${script_dir}/test-branches.sh"
+    local test_script="${INSTALL_DIR}/test-branches.sh"
+    
+    if [[ -f "${script_dir}/test-branches.sh" ]]; then
+        cp "${script_dir}/test-branches.sh" "$test_script"
+    else
+        log_info "Downloading verification tests..."
+        curl -fsSL "${SCRIPT_URL_BASE}/test-branches.sh" -o "$test_script"
+    fi
+    
     if [[ -f "$test_script" ]]; then
         log_info "Running verification tests..."
         chmod +x "$test_script"
